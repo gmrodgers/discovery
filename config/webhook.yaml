@@ -35,7 +35,8 @@ spec:
         discovery.knative.dev/release: devel
     spec:
       serviceAccountName: controller
-
+      imagePullSecrets:
+      - name: registry-secret
       # To avoid node becoming SPOF, spread our replicas to different nodes.
       affinity:
         podAntiAffinity:

@@ -19,6 +19,7 @@ package clusterducktype
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -34,6 +35,8 @@ import (
 	"knative.dev/discovery/pkg/apis/discovery/v1alpha1"
 	ducktypereconciler "knative.dev/discovery/pkg/client/injection/reconciler/discovery/v1alpha1/clusterducktype"
 	"knative.dev/pkg/reconciler"
+
+    "github.com/xeipuuv/gojsonschema"
 )
 
 // Reconciler implements ducktypereconciler.Interface for
@@ -82,6 +85,12 @@ func (r *Reconciler) ReconcileKind(ctx context.Context, dt *v1alpha1.ClusterDuck
 				logging.FromContext(ctx).Warnw("unable to add resource ref", zap.Error(err))
 			}
 		}
+
+		crds, err := r.getCRDsWhichMatch(dv.Schema)
+		if err != nil {
+			return err
+		}
+		hunter.AddCRDs(crds)
 	}
 
 	dt.Status.Ducks = hunter.Ducks()
@@ -104,6 +113,46 @@ func (r *Reconciler) getCRDsWith(labelSelector string) ([]*apiextensionsv1.Custo
 	}
 
 	return list, nil
+}
+
+func (r *Reconciler) getCRDsWhichMatch(schema *apiextensionsv1.CustomResourceValidation) ([]*apiextensionsv1.CustomResourceDefinition, error) {
+	ls, err := labels.Parse("")
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := r.crdLister.List(ls)
+	if err != nil {
+		return nil, err
+	}
+
+	var crdsThatMatch []*apiextensionsv1.CustomResourceDefinition
+	for _, crd := range list {
+		fmt.Printf("%#v\n", schema.OpenAPIV3Schema)
+		fmt.Printf("%#v\n", crd)
+		if reflect.DeepEqual(crd.Spec.Validation.OpenAPIV3Schema, schema.OpenAPIV3Schema) {  // will deep equals work here
+			fmt.Printf("The CRD %s is valid\n", crd.Name)
+			crdsThatMatch = append(crdsThatMatch, crd)
+		} else {
+			fmt.Printf("The %s is not valid\n", crd.Name)
+		}
+		//
+		//result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+		//if err != nil {
+		//	return []*apiextensionsv1.CustomResourceDefinition{}, err
+		//}
+		//
+		//if result.Valid() {
+		//	fmt.Printf("The CRD %s is valid\n", crd.Name)
+		//} else {
+		//	fmt.Printf("The %s is not valid. see errors :\n", crd.Name)
+		//	for _, desc := range result.Errors() {
+		//		fmt.Printf("- %s\n", desc)
+		//	}
+		//}
+	}
+
+	return crdsThatMatch, nil
 }
 
 // resyncResourceMapper will make a call to the Kubernetes APIServer to request
